@@ -1,5 +1,14 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'dart:math';
+import 'dart:typed_data';
+import 'dart:io';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter/rendering.dart';
 
 class Item {
   String name;
@@ -18,18 +27,21 @@ class PieChartScreen extends StatefulWidget {
 }
 
 class _PieChartScreenState extends State<PieChartScreen> with SingleTickerProviderStateMixin {
-  List<Item> items = [
-    Item('Item 1', 10, 5, 100.0, 'https://via.placeholder.com/60'),
-    Item('Item 2', 20, 3, 200.0, 'https://via.placeholder.com/60'),
-    Item('Item 3', 30, 8, 300.0, 'https://via.placeholder.com/60'),
-    Item('Item 4', 40, 2, 400.0, 'https://via.placeholder.com/60'),
-  ];
+  List<Item> items = List.generate(
+    10,
+        (index) => Item(
+      'Item ${index + 1}',
+      Random().nextInt(100),
+      Random().nextInt(10),
+      Random().nextDouble() * 1000,
+      'https://via.placeholder.com/60',
+    ),
+  );
 
   List<Item> filteredItems = [];
   late AnimationController _controller;
   late Animation<double> _animation;
   String sortBy = 'name';
-  String searchQuery = '';
 
   @override
   void initState() {
@@ -42,7 +54,7 @@ class _PieChartScreenState extends State<PieChartScreen> with SingleTickerProvid
     });
     _animation = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
     _controller.forward();
-    filteredItems = items;
+    filteredItems = List.from(items);
   }
 
   @override
@@ -65,20 +77,6 @@ class _PieChartScreenState extends State<PieChartScreen> with SingleTickerProvid
     });
   }
 
-  void filterItems(String query) {
-    setState(() {
-      searchQuery = query;
-      if (query.isEmpty) {
-        filteredItems = items;
-      } else {
-        filteredItems = items
-            .where((item) => item.name.toLowerCase().contains(query.toLowerCase()))
-            .toList();
-      }
-      sortItems();
-    });
-  }
-
   void toggleItemSelection(Item item) {
     setState(() {
       item.isSelected = !item.isSelected;
@@ -87,79 +85,125 @@ class _PieChartScreenState extends State<PieChartScreen> with SingleTickerProvid
     });
   }
 
+  Future<void> _generatePdf() async {
+    final pdf = pw.Document();
+    final image = await _capturePng();
+
+    pdf.addPage(
+      pw.Page(
+        build: (pw.Context context) {
+          return pw.Center(
+            child: pw.Image(pw.MemoryImage(image)),
+          );
+        },
+      ),
+    );
+
+    try {
+      final output = await getTemporaryDirectory();
+      final file = File("${output.path}/example.pdf");
+      await file.writeAsBytes(await pdf.save());
+      print("PDF saved to ${file.path}");
+    } catch (e) {
+      print("Error saving PDF: $e");
+    }
+  }
+
+  Future<Uint8List> _capturePng() async {
+    final boundary = _globalKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+    final image = await boundary.toImage();
+    final byteData = await image.toByteData(format: ImageByteFormat.png);
+    return byteData!.buffer.asUint8List();
+  }
+
+  final GlobalKey _globalKey = GlobalKey();
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         Expanded(
-          child: CustomPaint(
-            size: Size(300, 300),
-            painter: PieChartPainter(items, _animation.value),
+          child: Center(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                RepaintBoundary(
+                  key: _globalKey,
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(vertical: 20),
+                    width: 300,
+                    height: 300,
+                    child: CustomPaint(
+                      painter: PieChartPainter(items, _animation.value),
+                    ),
+                  ),
+                ),
+                SizedBox(width: 20),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: items.map((item) {
+                    return GestureDetector(
+                      onTap: () => toggleItemSelection(item),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 10,
+                            height: 10,
+                            color: item.isSelected
+                                ? Colors.primaries[items.indexOf(item) % Colors.primaries.length]
+                                : Colors.grey,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            item.name,
+                            style: TextStyle(
+                              color: item.isSelected
+                                  ? Colors.primaries[items.indexOf(item) % Colors.primaries.length]
+                                  : Colors.grey,
+                              decoration: item.isSelected ? TextDecoration.none : TextDecoration.lineThrough,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
           ),
         ),
         Padding(
           padding: const EdgeInsets.all(8.0),
-          child: Column(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              TextField(
-                decoration: InputDecoration(
-                  labelText: 'Search',
-                  border: OutlineInputBorder(),
-                ),
-                onChanged: filterItems,
+              Text(
+                'Sort by:',
+                style: TextStyle(fontSize: 16),
               ),
-              SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Sort by:',
-                    style: TextStyle(fontSize: 16),
-                  ),
-                  DropdownButton<String>(
-                    value: sortBy,
-                    items: <String>['name', 'sales', 'invoices', 'totalAmount']
-                        .map((String value) {
-                      return DropdownMenuItem<String>(
-                        value: value,
-                        child: Text(value),
-                      );
-                    }).toList(),
-                    onChanged: (String? newValue) {
-                      setState(() {
-                        sortBy = newValue!;
-                        sortItems();
-                      });
-                    },
-                  ),
-                ],
+              DropdownButton<String>(
+                value: sortBy,
+                items: <String>['name', 'sales', 'invoices', 'totalAmount']
+                    .map((String value) {
+                  return DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value),
+                  );
+                }).toList(),
+                onChanged: (String? newValue) {
+                  setState(() {
+                    sortBy = newValue!;
+                    sortItems();
+                  });
+                },
               ),
             ],
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: items.map((item) {
-                return GestureDetector(
-                  onTap: () => toggleItemSelection(item),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                    child: Chip(
-                      label: Text(
-                        item.name,
-                        style: TextStyle(
-                          decoration: item.isSelected ? TextDecoration.none : TextDecoration.lineThrough,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
+        ElevatedButton(
+          onPressed: _generatePdf,
+          child: Text('Generate PDF'),
         ),
         Expanded(
           child: ItemDetails(filteredItems),
@@ -203,15 +247,17 @@ class PieChartPainter extends CustomPainter {
       );
 
       final radius = size.width / 2;
-      final x = radius + radius * cos(startAngle + sweepAngle / 2) / 2;
-      final y = radius + radius * sin(startAngle + sweepAngle / 2) / 2;
+      final middleAngle = startAngle + sweepAngle / 2;
+      final isSmallSlice = sweepAngle < 0.2;
+      final x = radius + radius * cos(middleAngle) * (isSmallSlice ? 1.1 : 0.65);
+      final y = radius + radius * sin(middleAngle) * (isSmallSlice ? 1.1 : 0.65);
 
       final percent = (item.sales / total * 100).toStringAsFixed(1) + '%';
       textPainter.text = TextSpan(
         text: percent,
         style: TextStyle(
-          fontSize: 12,
-          color: Colors.white,
+          fontSize: 10,
+          color: isSmallSlice ? Colors.grey : Colors.white,
         ),
       );
       textPainter.layout();
@@ -238,43 +284,155 @@ class ItemDetails extends StatelessWidget {
       itemCount: items.length,
       itemBuilder: (context, index) {
         final item = items[index];
-        return Card(
-          elevation: 3,
-          margin: EdgeInsets.all(10),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
+        return Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.secondary,
+            borderRadius: BorderRadius.circular(16.0),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outline,
+            ),
           ),
           child: Padding(
             padding: EdgeInsets.all(16.0),
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.max,
               children: [
-                Image.network(
-                  item.imageUrl,
-                  width: 60,
-                  height: 60,
-                  fit: BoxFit.cover,
-                ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.name,
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                Row(
+                  mainAxisSize: MainAxisSize.max,
+                  children: [
+                    Padding(
+                      padding: EdgeInsetsDirectional.fromSTEB(4.0, 0.0, 0.0, 0.0),
+                      child: Container(
+                        width: 58.0,
+                        height: 58.0,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.background,
+                          borderRadius: BorderRadius.circular(27.0),
+                        ),
+                        alignment: AlignmentDirectional(0.0, 0.0),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8.0),
+                          child: Image.network(
+                            item.imageUrl,
+                            width: 48.0,
+                            height: 48.0,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
                       ),
-                      SizedBox(height: 8),
-                      Text('Sales: ${item.sales}'),
-                      Text('Invoices: ${item.invoices}'),
-                      Text('Total Amount: \$${item.totalAmount.toStringAsFixed(2)}'),
-                      SizedBox(height: 8),
-                      LinearProgressIndicator(
-                        value: item.sales / 100,
-                        backgroundColor: Colors.grey[300],
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: EdgeInsetsDirectional.fromSTEB(8.0, 0.0, 8.0, 0.0),
+                        child: Container(
+                          height: 70.0,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.max,
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.max,
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    item.name,
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      fontSize: 13.0,
+                                      letterSpacing: 0.0,
+                                    ),
+                                  ),
+                                  Text(
+                                    '\$${item.totalAmount.toStringAsFixed(2)}',
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      fontSize: 13.0,
+                                      letterSpacing: 0.0,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                mainAxisSize: MainAxisSize.max,
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  RichText(
+                                    text: TextSpan(
+                                      children: [
+                                        TextSpan(
+                                          text: item.sales.toString(),
+                                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                            color: Theme.of(context).colorScheme.primary,
+                                            fontSize: 13.0,
+                                            letterSpacing: 0.0,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text: ' inv',
+                                          style: TextStyle(
+                                            fontSize: 11.0,
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text: ' - ',
+                                          style: TextStyle(
+                                            fontSize: 13.0,
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text: item.invoices.toString(),
+                                          style: TextStyle(
+                                            color: Theme.of(context).colorScheme.primary,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13.0,
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text: ' units',
+                                          style: TextStyle(
+                                            fontSize: 11.0,
+                                          ),
+                                        ),
+                                      ],
+                                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        letterSpacing: 0.0,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    '\$${(item.totalAmount - item.sales * item.invoices).toStringAsFixed(2)}',
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: Theme.of(context).colorScheme.secondary,
+                                      fontSize: 12.0,
+                                      letterSpacing: 0.0,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                mainAxisSize: MainAxisSize.max,
+                                children: [
+                                  Expanded(
+                                    child: Align(
+                                      alignment: AlignmentDirectional(0.0, 0.0),
+                                      child: Padding(
+                                        padding: EdgeInsetsDirectional.fromSTEB(4.0, 4.0, 4.0, 0.0),
+                                        child: LinearProgressIndicator(
+                                          value: item.sales / 100,
+                                          backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+                                          valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.primary),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ],
             ),

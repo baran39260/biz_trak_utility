@@ -34,55 +34,45 @@ class _CostIncomePageState extends State<CostIncomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Daily Cost and Income Chart'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Column(
-          children: [
-            Expanded(
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Column(
+        children: [
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 500),
               child: CostIncomeChart(
+                key: ValueKey<bool>(_isBarChart),
                 data: generateCostIncomeData(),
                 isBarChart: _isBarChart,
                 fillBelowLine: _fillBelowLine,
                 showYAxis: _showYAxis,
               ),
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text('Bar Chart'),
-                Switch(
-                  value: _isBarChart,
-                  onChanged: _toggleChartType,
-                ),
-                const Text('Line Chart'),
-              ],
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text('Fill Below Line'),
-                Switch(
-                  value: _fillBelowLine,
-                  onChanged: _toggleFillBelowLine,
-                ),
-              ],
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text('Show Y Axis'),
-                Switch(
-                  value: _showYAxis,
-                  onChanged: _toggleShowYAxis,
-                ),
-              ],
-            ),
-          ],
-        ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('Bar Chart'),
+              Switch(
+                value: _isBarChart,
+                onChanged: _toggleChartType,
+              ),
+              const Text('Line Chart'),
+              const SizedBox(width: 20), // Spacer for better alignment
+              const Text('Fill Below Line'),
+              Switch(
+                value: _fillBelowLine,
+                onChanged: _toggleFillBelowLine,
+              ),
+              const Text('Show Y Axis'),
+              Switch(
+                value: _showYAxis,
+                onChanged: _toggleShowYAxis,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -135,13 +125,18 @@ class _CostIncomeChartState extends State<CostIncomeChart> with SingleTickerProv
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        return CustomPaint(
-          size: Size(constraints.maxWidth, constraints.maxHeight),
-          painter: CostIncomeChartPainter(
-            widget.data,
-            widget.isBarChart,
-            widget.fillBelowLine,
-            widget.showYAxis,
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+          width: constraints.maxWidth,
+          height: constraints.maxHeight,
+          child: CustomPaint(
+            painter: CostIncomeChartPainter(
+              widget.data,
+              widget.isBarChart,
+              widget.fillBelowLine,
+              widget.showYAxis,
+            ),
           ),
         );
       },
@@ -158,7 +153,7 @@ class CostIncomeChartPainter extends CustomPainter {
   final double borderRadius = 8.0;
   final double textPadding = 10.0;
   final double extraHeightFactor = 1.1; // Factor to increase the chart height
-  final TextStyle textStyle = TextStyle(color: Colors.black, fontSize: 10);
+  final TextStyle textStyle = TextStyle(color: Colors.black87, fontSize: 10, fontWeight: FontWeight.bold);
   final DateFormat dateFormat = DateFormat('E');
 
   CostIncomeChartPainter(this.data, this.isBarChart, this.fillBelowLine, this.showYAxis);
@@ -184,8 +179,8 @@ class CostIncomeChartPainter extends CustomPainter {
 
   void _drawAxes(Canvas canvas, Size size, double chartWidth, double chartHeight, double maxValue) {
     final axisPaint = Paint()
-      ..color = Colors.black
-      ..strokeWidth = 1.0;
+      ..color = Colors.black87
+      ..strokeWidth = 2.0;
 
     canvas.drawLine(
       Offset(padding, size.height - padding),
@@ -204,7 +199,7 @@ class CostIncomeChartPainter extends CustomPainter {
     for (int i = 0; i <= 5; i++) {
       final y = size.height - padding - (i * chartHeight / 5);
       final label = (step * i).toStringAsFixed(0);
-      _drawText(canvas, label, Offset(padding - 30, y - 6));
+      _drawText(canvas, label, Offset(padding - 40, y - 10));
     }
 
     final weekdays = <int, String>{
@@ -255,8 +250,24 @@ class CostIncomeChartPainter extends CustomPainter {
         topRight: Radius.circular(borderRadius),
       );
 
-      canvas.drawRRect(incomeRect, Paint()..color = Colors.green);
-      canvas.drawRRect(costRect, Paint()..color = Colors.red);
+      final incomePaint = Paint()
+        ..color = Colors.green
+        ..shader = LinearGradient(
+          colors: [Colors.green[700]!, Colors.green[300]!],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ).createShader(incomeRect.outerRect);
+
+      final costPaint = Paint()
+        ..color = Colors.red
+        ..shader = LinearGradient(
+          colors: [Colors.red[700]!, Colors.red[300]!],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ).createShader(costRect.outerRect);
+
+      canvas.drawRRect(incomeRect, incomePaint);
+      canvas.drawRRect(costRect, costPaint);
 
       final incomeText = NumberFormat.simpleCurrency(locale: 'en_US').format(incomeData);
       final costText = NumberFormat.simpleCurrency(locale: 'en_US').format(costData);
@@ -352,13 +363,16 @@ class CostIncomeChartPainter extends CustomPainter {
 
   void _drawGridLines(Canvas canvas, Size size, double chartWidth, double chartHeight, double maxValue) {
     final gridPaint = Paint()
-      ..color = Colors.grey[300]!
-      ..strokeWidth = 0.5;
+      ..color = Colors.grey.withOpacity(0.5)
+      ..strokeWidth = 1.0;
 
     final horizontalLines = 5;
+    final step = maxValue / 5;
 
-    for (int i = 0; i < horizontalLines; i++) {
-      final y = size.height - padding - (i * chartHeight / (horizontalLines - 1));
+    for (int i = 0; i <= horizontalLines; i++) {
+      final y = size.height - padding - (i * chartHeight / horizontalLines);
+      final label = (step * i).toStringAsFixed(0);
+      _drawText(canvas, label, Offset(padding - 40, y - 10));
       canvas.drawLine(
         Offset(padding, y),
         Offset(size.width - padding, y),
