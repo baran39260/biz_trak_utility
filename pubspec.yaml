@@ -55,6 +55,11 @@ dev_dependencies:
   timezone: ^0.9.3
   pdf: ^3.3.0
   printing: ^5.4.1
+  htmltopdfwidgets: ^1.0.3
+  provider: ^6.1.2
+  flutter_fusioncharts: ^1.0.2
+  shimmer: ^2.0.0
+
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

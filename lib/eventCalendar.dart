@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'dart:ui' as ui;
 import 'package:intl/intl.dart';
+import 'dart:ui' as ui;
 
 class CalendarScreen extends StatefulWidget {
   @override
@@ -8,257 +8,233 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
-  DateTime _selectedDate = DateTime.now();
-  DateTime _focusedDate = DateTime.now();
-  String _selectedEvent = "";
-  late PageController _pageController;
-
-  final Map<int, Map<int, Map<int, String>>> events = {
-    2024: {
-      1: {
-        1: 'New Year Celebration',
-        5: 'Team Meeting',
-        14: 'Client Call',
-      },
-      2: {
-        10: 'Project Deadline',
-        18: 'Team Outing',
-      },
-      3: {
-        3: 'Purchase Order',
-        8: 'Quarterly Review',
-        21: 'Product Launch',
-      },
-      4: {
-        4: 'Board Meeting',
-        15: 'Tax Filing Deadline',
-        22: 'Earth Day Event',
-      },
-      5: {
-        1: 'Labor Day',
-        9: 'Supplier Meeting',
-        23: 'Annual Conference',
-      },
-      6: {
-        3: 'Purchase Order',
-        5: 'Sale Order',
-        7: 'Client Meeting',
-        11: 'Supplier Visit',
-        18: 'Inventory Check',
-        25: 'Team Building Activity',
-      },
-    },
-  };
-
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController(
-      initialPage: (_focusedDate.year * 12 + _focusedDate.month) - 1,
-    );
-  }
+  DateTime currentDate = DateTime.now();
+  DateTime? selectedDate;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _buildHeader(),
-        Expanded(
-          child: PageView.builder(
-            controller: _pageController,
-            onPageChanged: (index) {
-              setState(() {
-                int year = index ~/ 12;
-                int month = index % 12 + 1;
-                _focusedDate = DateTime(year, month);
-              });
-            },
-            itemBuilder: (context, index) {
-              int year = index ~/ 12;
-              int month = index % 12 + 1;
-              return CustomPaint(
-                size: Size(double.infinity, 400),
-                painter: CalendarPainter(
-                  month: month,
-                  year: year,
-                  events: events,
-                  onDayTap: (date) {
-                    setState(() {
-                      _selectedDate = date;
-                      _selectedEvent = events[date.year]?[date.month]?[date.day] ?? "No events";
-                    });
-                  },
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: 500, // تنظیم حداکثر عرض
+                maxHeight: 600, // تنظیم حداکثر ارتفاع
+              ),
+              child: AspectRatio(
+                aspectRatio: 1, // حفظ نسبت ابعاد 1:1
+                child: Container(
+                  width: double.infinity,
+                  height: double.infinity,
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            IconButton(
+                              icon: Icon(Icons.arrow_back),
+                              onPressed: () {
+                                setState(() {
+                                  currentDate = DateTime(currentDate.year, currentDate.month - 1);
+                                  selectedDate = null;
+                                });
+                              },
+                            ),
+                            Text(
+                              '${DateFormat.MMMM().format(currentDate)} ${currentDate.year}',
+                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.arrow_forward),
+                              onPressed: () {
+                                setState(() {
+                                  currentDate = DateTime(currentDate.year, currentDate.month + 1);
+                                  selectedDate = null;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      _buildDaysOfWeekRow(),
+                      Expanded(
+                        child: GestureDetector(
+                          onTapDown: (details) {
+                            _handleTap(details.localPosition, constraints.biggest);
+                          },
+                          child: CustomPaint(
+                            size: Size(constraints.maxWidth, constraints.maxWidth),
+                            painter: CalendarPainter(currentDate, selectedDate),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              );
-            },
-          ),
-        ),
-        if (_selectedEvent.isNotEmpty)
-          EventDetails(
-            date: _selectedDate,
-            event: _selectedEvent,
-          ),
-      ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildDaysOfWeekRow() {
+    List<String> daysOfWeek = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        IconButton(
-          icon: Icon(Icons.arrow_back),
-          onPressed: () {
-            _pageController.previousPage(duration: Duration(milliseconds: 300), curve: Curves.easeInOut);
-          },
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      children: daysOfWeek
+          .map((day) => Container(
+        width: 500 / 7,
+        child: Text(
+          day,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
+              color: Colors.black),
         ),
-        Text(
-          DateFormat.yMMMM().format(_focusedDate),
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        IconButton(
-          icon: Icon(Icons.arrow_forward),
-          onPressed: () {
-            _pageController.nextPage(duration: Duration(milliseconds: 300), curve: Curves.easeInOut);
-          },
-        ),
-      ],
+      ))
+          .toList(),
     );
+  }
+
+  void _handleTap(Offset position, Size size) {
+    double daySize = size.width / 7;
+    int day = (position.dx / daySize).floor();
+    int week = (position.dy / daySize).floor();
+
+    DateTime firstDayOfMonth = DateTime(currentDate.year, currentDate.month, 1);
+    int startDay = firstDayOfMonth.weekday - 1;
+    int dayNumber = week * 7 + day - startDay + 1;
+
+    if (dayNumber > 0 && dayNumber <= daysInMonth(currentDate.year, currentDate.month)) {
+      setState(() {
+        selectedDate = DateTime(currentDate.year, currentDate.month, dayNumber);
+      });
+    }
+  }
+
+  int daysInMonth(int year, int month) {
+    return DateTime(year, month + 1, 0).day;
   }
 }
 
 class CalendarPainter extends CustomPainter {
-  final int month;
-  final int year;
-  final Map<int, Map<int, Map<int, String>>> events;
-  final Function(DateTime) onDayTap;
+  final DateTime currentDate;
+  final DateTime? selectedDate;
 
-  CalendarPainter({required this.month, required this.year, required this.events, required this.onDayTap});
+  CalendarPainter(this.currentDate, this.selectedDate);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.black
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
+    var paint = Paint()..style = PaintingStyle.fill;
 
-    final textPainter = TextPainter(
+    var textPainter = TextPainter(
       textAlign: TextAlign.center,
       textDirection: ui.TextDirection.ltr,
     );
 
-    // Drawing days of the week
-    final daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    for (int i = 0; i < daysOfWeek.length; i++) {
+    double daySize = size.width / 7;
+    double radius = daySize / 2.5;
+
+    DateTime firstDayOfMonth = DateTime(currentDate.year, currentDate.month, 1);
+    int startDay = firstDayOfMonth.weekday - 1;
+
+    // Display days of the previous month
+    _drawPreviousMonthDays(canvas, textPainter, startDay, daySize);
+
+    // Display days of the current month
+    _drawCurrentMonthDays(canvas, textPainter, startDay, daySize, radius);
+
+    // Display days of the next month
+    _drawNextMonthDays(canvas, textPainter, startDay, daySize);
+  }
+
+  void _drawPreviousMonthDays(Canvas canvas, TextPainter textPainter, int startDay, double daySize) {
+    DateTime previousMonth = DateTime(currentDate.year, currentDate.month - 1);
+    int daysInPreviousMonth = daysInMonth(previousMonth.year, previousMonth.month);
+    for (int i = startDay - 1; i >= 0; i--) {
+      int dayNumber = daysInPreviousMonth - (startDay - 1 - i);
+      double x = i * daySize + daySize / 2;
+      double y = daySize / 2;
+
       textPainter.text = TextSpan(
-        text: daysOfWeek[i],
-        style: TextStyle(fontSize: 16, color: Colors.black),
+        text: '$dayNumber',
+        style: TextStyle(color: Colors.grey, fontSize: 16, fontWeight: FontWeight.bold),
       );
       textPainter.layout();
-      textPainter.paint(canvas, Offset(i * size.width / 7 + 10, 20));
+      textPainter.paint(canvas, Offset(x - textPainter.width / 2, y - textPainter.height / 2));
     }
+  }
 
-    // Drawing the days with colored dots
-    final daysInMonth = DateTime(year, month + 1, 0).day;
-    final startDay = DateTime(year, month, 1).weekday % 7;
+  void _drawCurrentMonthDays(Canvas canvas, TextPainter textPainter, int startDay, double daySize, double radius) {
+    var paint = Paint()..style = PaintingStyle.fill;
+    for (int week = 0; week < 6; week++) {
+      for (int day = 0; day < 7; day++) {
+        int dayNumber = week * 7 + day - startDay + 1;
+        if (dayNumber < 1 || dayNumber > daysInMonth(currentDate.year, currentDate.month)) {
+          continue;
+        }
 
-    final eventDays = events[year]?[month] ?? {};
+        double x = day * daySize + daySize / 2;
+        double y = week * daySize + daySize / 2;
 
-    // Drawing days of previous month
-    final prevMonthDays = (startDay > 0) ? startDay : 0;
-    final prevMonthLastDay = DateTime(year, month, 0).day;
-    for (int i = 0; i < prevMonthDays; i++) {
-      textPainter.text = TextSpan(
-        text: (prevMonthLastDay - prevMonthDays + 1 + i).toString(),
-        style: TextStyle(fontSize: 14, color: Colors.grey),
-      );
-      textPainter.layout();
-      textPainter.paint(canvas, Offset(i * size.width / 7 + 10, 60));
-    }
+        bool isSelected = selectedDate != null &&
+            selectedDate!.year == currentDate.year &&
+            selectedDate!.month == currentDate.month &&
+            selectedDate!.day == dayNumber;
 
-    // Drawing days of current month
-    for (int i = 0; i < daysInMonth; i++) {
-      int row = (i + startDay) ~/ 7;
-      int col = (i + startDay) % 7;
+        bool isToday = DateTime.now().year == currentDate.year &&
+            DateTime.now().month == currentDate.month &&
+            DateTime.now().day == dayNumber;
 
-      // Draw day number
-      textPainter.text = TextSpan(
-        text: (i + 1).toString(),
-        style: TextStyle(fontSize: 14, color: Colors.black),
-      );
-      textPainter.layout();
-      textPainter.paint(canvas, Offset(col * size.width / 7 + 10, row * 40 + 60));
+        if (isToday || isSelected) {
+          paint.color = isToday ? Colors.deepOrange : Colors.orange.withOpacity(0.5);
 
-      // Draw event dot if there is one
-      if (eventDays.containsKey(i + 1)) {
-        final dotPaint = Paint()
-          ..color = Colors.red
-          ..style = PaintingStyle.fill;
-        canvas.drawCircle(Offset(col * size.width / 7 + 25, row * 40 + 80), 3, dotPaint);
-      }
-    }
+          Rect rect = Rect.fromCenter(center: Offset(x, y), width: daySize * 0.8, height: daySize * 0.8);
+          RRect rRect = RRect.fromRectAndRadius(rect, Radius.circular(10));
 
-    // Drawing days of next month
-    int totalDays = startDay + daysInMonth;
-    int nextMonthDays = 7 - (totalDays % 7);
-    if (nextMonthDays < 7) {
-      for (int i = 0; i < nextMonthDays; i++) {
-        int row = (totalDays ~/ 7);
-        int col = (totalDays % 7) + i;
+          canvas.drawRRect(rRect, paint);
+        }
 
         textPainter.text = TextSpan(
-          text: (i + 1).toString(),
-          style: TextStyle(fontSize: 14, color: Colors.grey),
+          text: '$dayNumber',
+          style: TextStyle(color: isToday || isSelected ? Colors.white : Colors.black, fontSize: 16, fontWeight: FontWeight.bold),
         );
         textPainter.layout();
-        textPainter.paint(canvas, Offset(col * size.width / 7 + 10, row * 40 + 60));
+        textPainter.paint(canvas, Offset(x - textPainter.width / 2, y - textPainter.height / 2));
       }
     }
   }
 
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return true;
+  void _drawNextMonthDays(Canvas canvas, TextPainter textPainter, int startDay, double daySize) {
+    int endDay = daysInMonth(currentDate.year, currentDate.month) + startDay;
+    int lastRowDays = (endDay % 7 == 0) ? 0 : 7 - (endDay % 7); // Number of days to display in the last row
+    for (int i = endDay; i < endDay + lastRowDays; i++) {
+      int dayNumber = i - endDay + 1;
+      double x = (i % 7) * daySize + daySize / 2;
+      double y = (i ~/ 7) * daySize + daySize / 2;
+
+      textPainter.text = TextSpan(
+        text: '$dayNumber',
+        style: TextStyle(color: Colors.grey, fontSize: 16, fontWeight: FontWeight.bold),
+      );
+      textPainter.layout();
+      textPainter.paint(canvas, Offset(x - textPainter.width / 2, y - textPainter.height / 2));
+    }
   }
-}
 
-class EventDetails extends StatelessWidget {
-  final DateTime date;
-  final String event;
-
-  const EventDetails({required this.date, required this.event, Key? key}) : super(key: key);
+  int daysInMonth(int year, int month) {
+    return DateTime(year, month + 1, 0).day;
+  }
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.all(16),
-      margin: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.5),
-            spreadRadius: 2,
-            blurRadius: 5,
-            offset: Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Event on ${DateFormat.yMMMd().format(date)}',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          SizedBox(height: 8),
-          Text(
-            event,
-            style: TextStyle(fontSize: 14),
-          ),
-        ],
-      ),
-    );
+  bool shouldRepaint(CustomPainter oldDelegate) {
+    return true;
   }
 }

@@ -1,5 +1,4 @@
 import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'dart:math';
 import 'dart:typed_data';
@@ -227,10 +226,20 @@ class PieChartPainter extends CustomPainter {
     final paint = Paint()
       ..style = PaintingStyle.fill;
 
+    final outlinePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..color = Colors.grey.shade300
+      ..strokeWidth = 2.0;
+
     final textPainter = TextPainter(
       textAlign: TextAlign.center,
       textDirection: TextDirection.ltr,
     );
+
+    final radius = min(size.width, size.height) / 2;
+
+    // Draw outline
+    canvas.drawCircle(Offset(radius, radius), radius, outlinePaint);
 
     for (var item in items) {
       if (!item.isSelected) continue;
@@ -239,29 +248,52 @@ class PieChartPainter extends CustomPainter {
       paint.color = Colors.primaries[items.indexOf(item) % Colors.primaries.length];
 
       canvas.drawArc(
-        Rect.fromLTWH(0, 0, size.width, size.height),
+        Rect.fromCircle(center: Offset(radius, radius), radius: radius),
         startAngle,
         sweepAngle,
         true,
         paint,
       );
 
-      final radius = size.width / 2;
       final middleAngle = startAngle + sweepAngle / 2;
       final isSmallSlice = sweepAngle < 0.2;
-      final x = radius + radius * cos(middleAngle) * (isSmallSlice ? 1.1 : 0.65);
-      final y = radius + radius * sin(middleAngle) * (isSmallSlice ? 1.1 : 0.65);
+      final x = radius + radius * cos(middleAngle) * 0.7;
+      final y = radius + radius * sin(middleAngle) * 0.7;
 
       final percent = (item.sales / total * 100).toStringAsFixed(1) + '%';
-      textPainter.text = TextSpan(
-        text: percent,
-        style: TextStyle(
-          fontSize: 10,
-          color: isSmallSlice ? Colors.grey : Colors.white,
-        ),
-      );
-      textPainter.layout();
-      textPainter.paint(canvas, Offset(x - textPainter.width / 2, y - textPainter.height / 2));
+
+      if (isSmallSlice) {
+        // Draw the curved line for small slices
+        final path = Path();
+        path.moveTo(x, y);
+        final controlX = radius + radius * cos(middleAngle) * 0.85;
+        final controlY = radius + radius * sin(middleAngle) * 0.85;
+        final endX = radius + radius * cos(middleAngle) * 1.1;
+        final endY = radius + radius * sin(middleAngle) * 1.1;
+        path.quadraticBezierTo(controlX, controlY, endX, endY);
+        canvas.drawPath(path, outlinePaint);
+
+        textPainter.text = TextSpan(
+          text: percent,
+          style: TextStyle(
+            fontSize: 10,
+            color: Colors.black,
+          ),
+        );
+        textPainter.layout();
+        textPainter.paint(canvas, Offset(endX, endY));
+      } else {
+        // Draw the text inside the slice for larger slices
+        textPainter.text = TextSpan(
+          text: percent,
+          style: TextStyle(
+            fontSize: 10,
+            color: Colors.white,
+          ),
+        );
+        textPainter.layout();
+        textPainter.paint(canvas, Offset(x - textPainter.width / 2, y - textPainter.height / 2));
+      }
 
       startAngle += sweepAngle;
     }
